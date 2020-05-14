@@ -27,8 +27,9 @@ def all_clues(cls):
     return clues
 
 
-# Decorator to define methods of a class as a code generator.
 def cluegen(func):
+    """decorator to define methods of a class as a code generator."""
+
     def __get__(self, instance, cls):
         locs = {}
         code = func(cls)
@@ -47,8 +48,8 @@ def cluegen(func):
                                                      __set_name__=__set_name__))()
 
 
-# Base class for defining data structures
 class DatumBase:
+    """base class for defining data structures"""
     __slots__ = ()
     _methods = []
 
@@ -80,8 +81,8 @@ class Datum(DatumBase):
         return f'def __init__(self, {args}):\n{body}\n'
 
     @classmethod
-    def _gen_init_body(cls, clues):
-        return '\n'.join(f'    self.{name} = {name}' for name in clues)
+    def _gen_init_body(cls, clues, prepend=''):
+        return '\n'.join(f'    self.{prepend}{name} = {name}' for name in clues)
 
     @cluegen
     def __repr__(cls):
@@ -111,11 +112,13 @@ class Datum(DatumBase):
 class FrozenDatum(Datum):
     @classmethod
     def _gen_init_body(cls, clues):
+        prepend = '_cluegen_prop_'
         res = ['    def _frozen_error(*_):']
         res.append('        raise AttributeError("can\'t set/del attr on FrozenDatum")')
         res.append('    _frozen_prop = lambda fget: property(fget, _frozen_error, _frozen_error)')
+        res.append(super()._gen_init_body(clues, prepend))
         res.append(f'    cls = type(self)')
-        res.extend(f'    cls.{name} = _frozen_prop(lambda _: {name})' for name in clues)
+        res.extend(f'    cls.{name} = _frozen_prop(lambda self: self.{prepend}{name})' for name in clues)
         return '\n'.join(res)
 
     @cluegen
