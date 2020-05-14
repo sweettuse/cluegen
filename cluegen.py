@@ -1,10 +1,10 @@
 # cluegen.py
-# 
-# Classes generated from type clues. 
+#
+# Classes generated from type clues.
 #
 #     https://github.com/dabeaz/cluegen
 #
-# Author: David Beazley (@dabeaz). 
+# Author: David Beazley (@dabeaz).
 #         http://www.dabeaz.com
 #
 # Copyright (C) 2018-2020.
@@ -17,16 +17,20 @@
 import types
 
 # Collect all type clues from a class and base classes.
+from functools import partial
+
+
 def all_clues(cls):
-    clues = { }
+    clues = {}
     for c in reversed(cls.__mro__):
         clues.update(getattr(c, '__annotations__', {}))
     return clues
 
+
 # Decorator to define methods of a class as a code generator.
 def cluegen(func):
     def __get__(self, instance, cls):
-        locs = { }
+        locs = {}
         code = func(cls)
         exec(code, locs)
         meth = locs[func.__name__]
@@ -39,8 +43,9 @@ def cluegen(func):
             cls._methods = methods
         cls._methods.append((name, self))
 
-    return type(f'ClueGen_{func.__name__}', (), dict(__get__=__get__, 
+    return type(f'ClueGen_{func.__name__}', (), dict(__get__=__get__,
                                                      __set_name__=__set_name__))()
+
 
 # Base class for defining data structures
 class DatumBase:
@@ -60,17 +65,23 @@ class DatumBase:
         if submethods != cls._methods:
             cls._methods = submethods
 
+
 class Datum(DatumBase):
     __slots__ = ()
+
     @cluegen
     def __init__(cls):
         clues = all_clues(cls)
-        args = ', '.join(f'{name}={getattr(cls,name)!r}'
-                        if hasattr(cls, name) and not isinstance(getattr(cls, name), types.MemberDescriptorType) else name
-                        for name in clues)
-        body = '\n'.join(f'   self.{name} = {name}'
+        args = ', '.join(f'{name}={getattr(cls, name)!r}'
+                         if hasattr(cls, name) and not isinstance(getattr(cls, name),
+                                                                  types.MemberDescriptorType) else name
                          for name in clues)
+        body = cls._gen_init_body(clues)
         return f'def __init__(self, {args}):\n{body}\n'
+
+    @classmethod
+    def _gen_init_body(cls, clues):
+        return '\n'.join(f'    self.{name} = {name}' for name in clues)
 
     @cluegen
     def __repr__(cls):
@@ -85,17 +96,27 @@ class Datum(DatumBase):
         values = '\n'.join(f'   yield self.{name}' for name in clues)
         return 'def __iter__(self):\n' + values
 
-
     @cluegen
     def __eq__(cls):
         clues = all_clues(cls)
         selfvals = ','.join(f'self.{name}' for name in clues)
-        othervals = ','.join(f'other.{name}'for name in clues)
+        othervals = ','.join(f'other.{name}' for name in clues)
         return 'def __eq__(self, other):\n' \
                '    if self.__class__ is other.__class__:\n' \
                f'        return ({selfvals},) == ({othervals},)\n' \
                '    else:\n' \
                '        return NotImplemented\n'
+
+
+class FrozenDatum(Datum):
+    @classmethod
+    def _gen_init_body(cls, clues):
+        res = ['    def _frozen_error(*_):']
+        res.append('        raise AttributeError("can\'t set/del attr on FrozenDatum")')
+        res.append('    _frozen_prop = lambda fget: property(fget, _frozen_error, _frozen_error)')
+        res.append(f'    cls = type(self)')
+        res.extend(f'    cls.{name} = _frozen_prop(lambda _: {name})' for name in clues)
+        return '\n'.join(res)
 
     @cluegen
     def __hash__(cls):
@@ -107,11 +128,10 @@ class Datum(DatumBase):
         return 'def __hash__(self):\n' \
                f'    return hash({self_tuple})\n'
 
+
 # Example use
 if __name__ == '__main__':
     # Start defining classes
     class Coordinates(Datum):
         x: int
         y: int
-
-

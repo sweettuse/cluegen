@@ -35,6 +35,15 @@ class C{n}:
     d : int
     e : int
 '''
+dataclass_frozen_template = '''
+@dataclass(frozen=True)
+class C{n}:
+    a : int
+    b : int
+    c : int
+    d : int
+    e : int
+'''
 
 attr_template = '''
 @attr.s
@@ -67,6 +76,18 @@ class C{n}(Datum):
 C{n}.__init__, C{n}.__repr__, C{n}.__eq__
 '''
 
+cluegen_frozen_eval_template = '''
+class C{n}(FrozenDatum):
+    a : int
+    b : int
+    c : int
+    d : int
+    e : int
+
+C{n}.__init__, C{n}.__repr__, C{n}.__eq__
+'''
+
+
 def run_test(name, n):
     start = time.time()
     while n > 0:
@@ -74,14 +95,16 @@ def run_test(name, n):
         del sys.modules['perftemp']
         n -= 1
     end = time.time()
-    print(name, (end-start))
+    print(name, (end - start))
+
 
 def write_perftemp(count, template, setup):
     with open('perftemp.py', 'w') as f:
         f.write(setup)
         for n in range(count):
             f.write(template.format(n=n))
-    
+
+
 def main(reps):
     write_perftemp(100, standard_template, '')
     run_test('standard classes', reps)
@@ -102,6 +125,13 @@ def main(reps):
 
     write_perftemp(100, cluegen_eval_template, 'from cluegen import Datum\n')
     run_test('cluegen_eval', reps)
+
+    write_perftemp(100, dataclass_frozen_template, 'from dataclasses import dataclass\n')
+    run_test('dataclasses_frozen', reps)
+
+    write_perftemp(100, cluegen_frozen_eval_template, 'from cluegen import FrozenDatum\n')
+    run_test('cluegen_frozen_eval', reps)
+
 
 if __name__ == '__main__':
     if len(sys.argv) == 2:
