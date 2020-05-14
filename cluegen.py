@@ -16,11 +16,12 @@
 
 import types
 
-# Collect all type clues from a class and base classes.
-from functools import partial
+from functools import partial, lru_cache
 
 
+@lru_cache(maxsize=32)
 def all_clues(cls):
+    """collect all type clues from a class and base classes"""
     clues = {}
     for c in reversed(cls.__mro__):
         clues.update(getattr(c, '__annotations__', {}))
@@ -28,7 +29,7 @@ def all_clues(cls):
 
 
 def cluegen(func):
-    """decorator to define methods of a class as a code generator."""
+    """decorator to define methods of a class as a code generator"""
 
     def __get__(self, instance, cls):
         locs = {}
@@ -75,7 +76,8 @@ class Datum(DatumBase):
         clues = all_clues(cls)
         args = ', '.join(f'{name}={getattr(cls, name)!r}'
                          if hasattr(cls, name) and not isinstance(getattr(cls, name),
-                                                                  types.MemberDescriptorType) else name
+                                                                  (property, types.MemberDescriptorType))
+                         else name
                          for name in clues)
         body = cls._gen_init_body(clues)
         return f'def __init__(self, {args}):\n{body}\n'
@@ -108,18 +110,40 @@ class Datum(DatumBase):
                '    else:\n' \
                '        return NotImplemented\n'
 
+    @cluegen
+    def __getitem__(cls):
+        clues = tuple(all_clues(cls))
+        return '\n'.join(('def __getitem__(self, item):',
+                          f'    return getattr(self, {clues}[item])'))
 
-class FrozenDatum(Datum):
+    @cluegen
+    def __len__(cls):
+        length = len(all_clues(cls))
+        return '\n'.join(('def __len__(self):',
+                          f'    return {length}'))
+
+
+def _frozen_error(self, *_):
+    raise AttributeError(f"can't set/del attr on FrozenDatum type {type(self).__name__!r}")
+
+
+class FrozenMeta(type):
+    prop_store_prepend = '_cluegen_prop_'
+
+    def __new__(mcs, name, bases, cls_dict):
+        for n in cls_dict.get('__annotations__', {}):
+            # if n in cls_dict:
+            #     raise ValueError(f'cannot set default value ({cls_dict[n]!r}) on FrozenDatum attribute {n!r}'
+            #                      'due to inheritance!')
+            cls_dict[n] = property(lambda self, prop_name=f'{mcs.prop_store_prepend}{n}':
+                                   getattr(self, prop_name), _frozen_error, _frozen_error)
+        return super().__new__(mcs, name, bases, cls_dict)
+
+
+class FrozenDatum(Datum, metaclass=FrozenMeta):
     @classmethod
-    def _gen_init_body(cls, clues):
-        prepend = '_cluegen_prop_'
-        res = ['    def _frozen_error(*_):']
-        res.append('        raise AttributeError("can\'t set/del attr on FrozenDatum")')
-        res.append('    _frozen_prop = lambda fget: property(fget, _frozen_error, _frozen_error)')
-        res.append(super()._gen_init_body(clues, prepend))
-        res.append(f'    cls = type(self)')
-        res.extend(f'    cls.{name} = _frozen_prop(lambda self: self.{prepend}{name})' for name in clues)
-        return '\n'.join(res)
+    def _gen_init_body(cls, clues, prepend=FrozenMeta.prop_store_prepend):
+        return super()._gen_init_body(clues, prepend)
 
     @cluegen
     def __hash__(cls):
