@@ -80,7 +80,7 @@ class Datum(DatumBase):
                          else name
                          for name in clues)
         body = cls._gen_init_body(clues)
-        return f'def __init__(self, {args}):\n{body}\n'
+        return f'def __init__(self, {args}):\n{body or "    pass"}\n'
 
     @classmethod
     def _gen_init_body(cls, clues, prepend=''):
@@ -112,9 +112,8 @@ class Datum(DatumBase):
 
     @cluegen
     def __getitem__(cls):
-        clues = tuple(all_clues(cls))
         return '\n'.join(('def __getitem__(self, item):',
-                          f'    return getattr(self, {clues}[item])'))
+                          f'    return getattr(self, {tuple(all_clues(cls))}[item])'))
 
     @cluegen
     def __len__(cls):
