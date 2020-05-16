@@ -16,7 +16,7 @@
 
 import types
 
-from functools import partial, lru_cache
+from functools import lru_cache
 
 
 @lru_cache(maxsize=32)
@@ -74,13 +74,17 @@ class Datum(DatumBase):
     @cluegen
     def __init__(cls):
         clues = all_clues(cls)
-        args = ', '.join(f'{name}={getattr(cls, name)!r}'
-                         if hasattr(cls, name) and not isinstance(getattr(cls, name),
-                                                                  (property, types.MemberDescriptorType))
-                         else name
-                         for name in clues)
+        args = cls._gen_init_args(clues)
         body = cls._gen_init_body(clues)
         return f'def __init__(self, {args}):\n{body or "    pass"}\n'
+
+    @classmethod
+    def _gen_init_args(cls, clues):
+        return ', '.join(f'{name}={getattr(cls, name)!r}'
+                         if hasattr(cls, name) and not isinstance(getattr(cls, name),
+                                                                  types.MemberDescriptorType)
+                         else name
+                         for name in clues)
 
     @classmethod
     def _gen_init_body(cls, clues, prepend=''):
@@ -128,18 +132,35 @@ def _frozen_error(self, *_):
 
 class FrozenMeta(type):
     prop_store_prepend = '_cluegen_prop_'
+    _defaults = {}
 
     def __new__(mcs, name, bases, cls_dict):
+        defaults = {}
         for n in cls_dict.get('__annotations__', {}):
-            # if n in cls_dict:
-            #     raise ValueError(f'cannot set default value ({cls_dict[n]!r}) on FrozenDatum attribute {n!r}'
-            #                      'due to inheritance!')
+            if n in cls_dict:  # means a default value is set (e.g. a: int = 4)
+                defaults[n] = cls_dict[n]
             cls_dict[n] = property(lambda self, prop_name=f'{mcs.prop_store_prepend}{n}':
                                    getattr(self, prop_name), _frozen_error, _frozen_error)
-        return super().__new__(mcs, name, bases, cls_dict)
+        res = super().__new__(mcs, name, bases, cls_dict)
+        mcs._defaults[res] = defaults
+        return res
+
+    @classmethod
+    def get_defaults(mcs, cls):
+        res = {}
+        for c in cls.__mro__:
+            res.update(mcs._defaults.get(c, {}))
+        return res
 
 
 class FrozenDatum(Datum, metaclass=FrozenMeta):
+
+    @classmethod
+    def _gen_init_args(cls, clues):
+        defaults = FrozenMeta.get_defaults(cls)
+        defaults = {k: f'{k}={v}' for k, v in defaults.items()}
+        return ', '.join(defaults.get(c, c) for c in clues)
+
     @classmethod
     def _gen_init_body(cls, clues, prepend=FrozenMeta.prop_store_prepend):
         return super()._gen_init_body(clues, prepend)
