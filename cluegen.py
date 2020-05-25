@@ -16,7 +16,7 @@
 
 import types
 
-from functools import lru_cache
+from functools import lru_cache, wraps
 
 
 @lru_cache(maxsize=32)
@@ -33,9 +33,9 @@ def cluegen(func):
 
     def __get__(self, instance, cls):
         locs = {}
-        code = func(cls)
+        code = func(cls) + '\n    pass'
         exec(code, locs)
-        meth = locs[func.__name__]
+        meth = wraps(func)(locs[func.__name__])
         setattr(cls, func.__name__, meth)
         return meth.__get__(instance, cls)
 
@@ -76,7 +76,7 @@ class Datum(DatumBase):
         clues = all_clues(cls)
         args = cls._gen_init_args(clues)
         body = cls._gen_init_body(clues)
-        return f'def __init__(self, {args}):\n{body or "    pass"}\n'
+        return f'def __init__(self, {args}):\n{body}\n'
 
     @classmethod
     def _gen_init_args(cls, clues):
@@ -106,8 +106,8 @@ class Datum(DatumBase):
     @cluegen
     def __eq__(cls):
         clues = all_clues(cls)
-        selfvals = ','.join(f'self.{name}' for name in clues)
-        othervals = ','.join(f'other.{name}' for name in clues)
+        selfvals = ','.join(f'self.{name}' for name in clues) or None
+        othervals = ','.join(f'other.{name}' for name in clues) or None
         return 'def __eq__(self, other):\n' \
                '    if self.__class__ is other.__class__:\n' \
                f'        return ({selfvals},) == ({othervals},)\n' \
