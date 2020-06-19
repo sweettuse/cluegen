@@ -131,25 +131,25 @@ def _frozen_error(self, *_):
 
 
 class FrozenMeta(type):
-    prop_store_prepend = '_cluegen_prop_'
-    _defaults = {}
+    _cluegen_prop_store_prefix_ = '_cluegen_prop_'
+    _cluegen_defaults_ = {}
 
     def __new__(mcs, name, bases, cls_dict):
         defaults = {}
         for n in cls_dict.get('__annotations__', {}):
             if n in cls_dict:  # means a default value is set (e.g. a: int = 4)
                 defaults[n] = cls_dict[n]
-            cls_dict[n] = property(lambda self, prop_name=f'{mcs.prop_store_prepend}{n}':
+            cls_dict[n] = property(lambda self, prop_name=f'{mcs._cluegen_prop_store_prefix_}{n}':
                                    getattr(self, prop_name), _frozen_error, _frozen_error)
         res = super().__new__(mcs, name, bases, cls_dict)
-        mcs._defaults[res] = defaults
+        mcs._cluegen_defaults_[res] = defaults
         return res
 
     @classmethod
     def get_defaults(mcs, cls):
         res = {}
         for c in cls.__mro__:
-            res.update(mcs._defaults.get(c, {}))
+            res.update(mcs._cluegen_defaults_.get(c, {}))
         return res
 
 
@@ -162,7 +162,7 @@ class FrozenDatum(Datum, metaclass=FrozenMeta):
         return ', '.join(defaults.get(c, c) for c in clues)
 
     @classmethod
-    def _gen_init_body(cls, clues, prepend=FrozenMeta.prop_store_prepend):
+    def _gen_init_body(cls, clues, prepend=FrozenMeta._cluegen_prop_store_prefix_):
         return super()._gen_init_body(clues, prepend)
 
     @cluegen
