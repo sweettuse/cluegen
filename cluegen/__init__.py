@@ -18,6 +18,8 @@ import types
 
 from functools import lru_cache, wraps
 
+__all__ = 'all_clues', 'cluegen', 'Datum', 'FrozenDatum'
+
 
 @lru_cache(maxsize=32)
 def all_clues(cls):
