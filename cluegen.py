@@ -139,8 +139,11 @@ class FrozenMeta(type):
         for n in cls_dict.get('__annotations__', {}):
             if n in cls_dict:  # means a default value is set (e.g. a: int = 4)
                 defaults[n] = cls_dict[n]
-            cls_dict[n] = property(lambda self, prop_name=f'{mcs._cluegen_prop_store_prefix_}{n}':
-                                   getattr(self, prop_name), _frozen_error, _frozen_error)
+            cls_dict[n] = property(
+                lambda self, prop_name=f'{mcs._cluegen_prop_store_prefix_}{n}': getattr(self, prop_name),
+                _frozen_error,
+                _frozen_error
+            )
         res = super().__new__(mcs, name, bases, cls_dict)
         mcs._cluegen_defaults_[res] = defaults
         return res
@@ -176,9 +179,12 @@ class FrozenDatum(Datum, metaclass=FrozenMeta):
                f'    return hash({self_tuple})\n'
 
 
-# Example use
 if __name__ == '__main__':
-    # Start defining classes
-    class Coordinates(Datum):
+    # example
+    class Coordinates(FrozenDatum):
         x: int
         y: int
+
+
+    crds = Coordinates(2, 3)
+    print(crds)
